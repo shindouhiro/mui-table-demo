@@ -1,80 +1,182 @@
-import { useState } from 'react'
-import { Button } from '@mui/material';
-import HttpIcon from '@mui/icons-material/Http';
-import PluginCreate from './components/PluginCreate'
-import InfiniteScroll from 'react-infinite-scroll-component';
-import Accordion from '@mui/material/Accordion';
-import AccordionSummary from '@mui/material/AccordionSummary';
-import AccordionDetails from '@mui/material/AccordionDetails';
-import Typography from '@mui/material/Typography';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import {
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
+  Typography,
+  CircularProgress,
+  Container,
+} from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-const generateItems = (start, end) => {
-  const items = [];
-  for (let i = start; i < end; i++) {
-    items.push(`Item ${i + 1}`);
-  }
-  return items;
-};
-function App() {
-  const [pluginVisible, setPluginVisible] = useState(false)
-  const [items, setItems] = useState(generateItems(0, 20));
-  const [hasMore, setHasMore] = useState(true);
+import { FixedSizeList as List, VariableSizeList } from 'react-window';
 
-  const fetchMoreData = () => {
-    // if (items.length >= 1000) { // 假设最多加载1000项
-    //   setHasMore(false);
-    //   return;
-    // }
-    // 模拟数据加载
-    setTimeout(() => {
-      setItems((prevItems) => [
-        ...prevItems,
-        ...generateItems(prevItems.length, prevItems.length + 20),
-      ]);
-    }, 1500);
-  };
-  return (
-    <div style={{ textAlign: 'center', marginTop: '50px' }}>
-      <div className="flex w-200 overflow-hidden whitespace-nowrap text-ellipsis">
-        <div >xxxxxxxxbbbbssssssssssssss(大法师打发第三方水岸)</div>
-        <div className="ml-2  overflow-hidden whitespace-nowrap text-ellipsis">
-          |ssssssssssssssssssssssssssssssssssssssssssssssssssssssssdafdasfdafasdfadadfadfadfadsfda
-        </div>
-
-      </div>
-      <PluginCreate open={pluginVisible} onClose={() => setPluginVisible(false)} />
-      <Typography variant="h1" component="h2">
-        Welcome to MUI with Vite
-      </Typography>
-      <Button variant="contained" color="primary" startIcon={<HttpIcon />}
-        onClick={() => setPluginVisible(true)}
-      >
-        Click Me
-      </Button>
-
-
-      <div style={{ padding: 20, height: '200px', overflow: 'auto' }}>
-        <InfiniteScroll
-          dataLength={items.length}
-          next={fetchMoreData}
-          hasMore={false}
-          loader={<h4>Loading...</h4>}
-          endMessage={<p style={{ textAlign: 'center' }}><b>Yay! You have seen it all</b></p>}
-        >
-          {items.map((item, index) => (
-            <Accordion key={index}>
-              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                <Typography>{item}</Typography>
-              </AccordionSummary>
-              <AccordionDetails>
-                <Typography>{`Details for ${item}`}</Typography>
-              </AccordionDetails>
-            </Accordion>
-          ))}
-        </InfiniteScroll>
-      </div>
-    </div>
-  )
+// Define types for data structures
+interface PanelData {
+  panel: number;
+  items: string[];
 }
 
-export default App
+// Define types for function parameters
+type FetchMockPanels = (start: number, limit: number) => Promise<PanelData[]>;
+type FetchMockItems = (panel: number, start: number, limit: number) => Promise<string[]>;
+
+const fetchMockPanels: FetchMockPanels = (start, limit) => {
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      const data = Array.from({ length: limit }, (_, index) => ({
+        panel: start + index + 1,
+        items: Array.from({ length: 20 }, (_, idx) => `Item ${start + index + 1}-${idx + 1}`),
+      }));
+      resolve(data);
+    }, 1500); // Simulate network delay
+  });
+};
+
+const fetchMockItems: FetchMockItems = (panel, start, limit) => {
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      const items = Array.from({ length: limit }, (_, index) => `Item ${panel}-${start + index + 1}`);
+      resolve(items);
+    }, 1500); // Simulate network delay
+  });
+};
+
+const PanelContent: React.FC<{ panel: number; loadMoreItems: (panel: number) => void; items: string[] }> = ({
+  panel,
+  loadMoreItems,
+  items,
+}) => {
+  const listRef = useRef<VariableSizeList>(null);
+
+  const handleScroll = ({ scrollDirection, scrollOffset, scrollUpdateWasRequested }: { scrollDirection: string; scrollOffset: number; scrollUpdateWasRequested: boolean }) => {
+    if (!scrollUpdateWasRequested && scrollDirection === 'forward') {
+      const list = listRef.current;
+      if (list && list._outerRef.scrollTop + list._outerRef.clientHeight >= list._outerRef.scrollHeight - 5) {
+        loadMoreItems(panel);
+      }
+    }
+  };
+
+  return (
+    <VariableSizeList
+      height={200}
+      itemCount={items.length + 1}
+      itemSize={() => 35}
+      width="100%"
+      onScroll={handleScroll}
+      ref={listRef}
+      itemData={items}
+    >
+      {({ index, style }) => {
+        if (index === items.length) {
+          return (
+            <div style={style}>
+              <CircularProgress size={24} />
+            </div>
+          );
+        }
+        return (
+          <Typography key={index} variant="body2" style={style}>
+            {items[index]}
+          </Typography>
+        );
+      }}
+    </VariableSizeList>
+  );
+};
+
+const Panel: React.FC<{ index: number; style: React.CSSProperties; data: PanelData[]; loadMoreItems: (panel: number) => void }> = ({
+  index,
+  style,
+  data,
+  loadMoreItems,
+}) => {
+  const panelData = data[index];
+  const [items, setItems] = useState(panelData.items);
+
+  const loadMore = async (panel: number) => {
+    const newItems = await fetchMockItems(panel, items.length, 10);
+    setItems((prevItems) => [...prevItems, ...newItems]);
+  };
+
+  return (
+    <div style={style}>
+      <Accordion>
+        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+          <Typography>{`Collapsible Panel ${panelData.panel}`}</Typography>
+        </AccordionSummary>
+        <AccordionDetails>
+          <PanelContent panel={panelData.panel} loadMoreItems={loadMore} items={items} />
+        </AccordionDetails>
+      </Accordion>
+    </div>
+  );
+};
+
+const InfiniteScrollPanels: React.FC = () => {
+  const [panels, setPanels] = useState<PanelData[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const listRef = useRef<List>(null);
+  const panelHeight = 300; // Height of each panel
+
+  const loadMorePanels = useCallback(async () => {
+    if (loading || !hasMore) return;
+    setLoading(true);
+    const newPanels = await fetchMockPanels(panels.length, 5); // Load 5 panels each time
+    setPanels((prevPanels) => [...prevPanels, ...newPanels]);
+    if (newPanels.length < 5) {
+      setHasMore(false);
+    }
+    setLoading(false);
+  }, [loading, hasMore, panels.length]);
+
+  const handleScroll = useCallback(
+    ({ scrollDirection, scrollOffset, scrollUpdateWasRequested }: { scrollDirection: string; scrollOffset: number; scrollUpdateWasRequested: boolean }) => {
+      if (!scrollUpdateWasRequested && scrollDirection === 'forward') {
+        const list = listRef.current;
+        if (list && list._outerRef.scrollTop + list._outerRef.clientHeight >= list._outerRef.scrollHeight - 5) {
+          loadMorePanels();
+        }
+      }
+    },
+    [loadMorePanels]
+  );
+
+  useEffect(() => {
+    loadMorePanels();
+  }, [loadMorePanels]);
+
+  return (
+    <Container style={{ height: '100vh', overflow: 'auto' }}>
+      <List
+        height={window.innerHeight}
+        itemCount={hasMore ? panels.length + 1 : panels.length}
+        itemSize={panelHeight}
+        width="100%"
+        onScroll={handleScroll}
+        ref={listRef}
+        itemData={panels}
+      >
+        {({ index, style }) => {
+          if (index === panels.length) {
+            return (
+              <div style={style}>
+                <CircularProgress size={24} />
+              </div>
+            );
+          }
+          return <Panel index={index} style={style} data={panels} loadMoreItems={loadMorePanels} />;
+        }}
+      </List>
+      {!hasMore && (
+
+        <div style={{ textAlign: 'center', padding: 16 }}>
+          <Typography variant="body2">No more panels</Typography>
+        </div>
+      )}
+    </Container>
+  );
+};
+
+export default InfiniteScrollPanels;
