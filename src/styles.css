@@ -1,0 +1,29 @@
+html {
+  font-family: sans-serif;
+  font-size: 12px;
+}
+
+body {
+  margin: 0;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  overflow-x: hidden;
+}
+
+.List-Wrapper {
+  height: 100%;
+}
+
+.List {
+  border: 1px solid #ddd;
+  border-radius: 0.25rem;
+}
+
+.ListItem {
+  padding: 0 0.5rem;
+  line-height: 30px;
+}
